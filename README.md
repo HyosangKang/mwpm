@@ -1,7 +1,7 @@
 # mwpm
 minimum weight perfect matching
 
-# Referece
+# Reference
 Kolmogorov, V. Blossom V: a new implementation of a minimum cost perfect matching algorithm. <em>Math. Prog. Comp.</em> 1, 43–67 (2009). https://doi.org/10.1007/s12532-009-0002-8
 
 # Usage
