@@ -2,23 +2,22 @@ package mwpm
 
 import (
 	"fmt"
-
-	"gonum.org/v1/gonum/graph"
 )
 
 // Grow takes an weighted edge e to attach a blossom edge to the blossom graph.
 // The opration is depicted as
-//  o (+) u                o (+) u
-//   \ e           --->     \ e
+//	o (+) u                o (+) u
+//	               --->     \ e
 // (0) o = o (0)         (-) o = o (+)
-//     v   w                 v   w
-// In short, Grow makes the tree of u to 'grow'.
+//	v   w                 v   w
+// Grow makes the tree of u to 'grow'.
 // No new match is made in Grow.
 // The fields that needs updates are:
 // 0. labels of v, w
 // 1. edges bewteen u, v
 // 2. parent, root, children of u, v, w
-func (g *BlossomGraph) Grow(e graph.WeightedEdge) {
+
+func (g *Graph) Grow(e Wedge) {
 	u := g.Blossom(e.From().ID())
 	v := g.Blossom(e.To().ID())
 	if g.label[u] == 0 {
@@ -48,7 +47,7 @@ func (g *BlossomGraph) Grow(e graph.WeightedEdge) {
 }
 
 // MatchTo finds a matched blossom to the given blossom.
-func (g *BlossomGraph) MatchTo(u int64) int64 {
+func (g *Graph) MatchTo(u int64) int64 {
 	if fn, ok := g.edges[u]; ok {
 		for n, _ := range fn {
 			return n

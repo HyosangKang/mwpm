@@ -6,16 +6,18 @@ import (
 
 // Shrink makes a new blossom consists of nodes in a tree,
 // where two (+) sub-blossoms are connected by edge e.
-//     (-) o p
-//         |                     o p              o (+)
-//     (+) o                     |              /   \
-//       /   \        ---->      o b       (-) o  b  o (-)
-//  (-) o     o (-)             / \            |     |
-//      |  e  |            (-) o   o (-)       o  -  o
-//  o - o  - o - o                            (+)   (+)
+//
+//	   (-) o p
+//	       |                     o p              o (+)
+//	   (+) o                     |              /   \
+//	     /   \        ---->      o b       (-) o  b  o (-)
+//	(-) o     o (-)             / \            |     |
+//	    |  e  |            (-) o   o (-)       o  -  o
+//	o - o  - o - o                            (+)   (+)
+//
 // (-) (+)  (+) (-)
 // It does not remove the nodes, but there are changes in tree and blossom edges.
-func (g *BlossomGraph) Shrink(e graph.WeightedEdge) {
+func (g *Graph) Shrink(e graph.WeightedEdge) {
 
 	// u, v are blossoms containing nodes of e.
 	// (Both blossoms are (+) labeled and lie in the same tree.)
@@ -115,13 +117,18 @@ func (g *BlossomGraph) Shrink(e graph.WeightedEdge) {
 
 // CommonParent finds the common ansester of u, v and cycle of blossoms from u to p and to v.
 // For example it returns (2, [0,1,2,4,3]) if the tree looks like:
-//        o  [2]
-//      /   \
+//
+//	  o  [2]
+//	/   \
+//
 // [1] o     o [4]
-//     |     |
+//
+//	|     |
+//
 // [0] o     o [3]
-//     u     v
-func (g *BlossomGraph) Cycle(u, v int64) (int64, []int64) {
+//
+//	u     v
+func (g *Graph) Cycle(u, v int64) (int64, []int64) {
 	h1 := g.Heritage(u)
 	h2 := g.Heritage(v)
 
@@ -148,7 +155,7 @@ func (g *BlossomGraph) Cycle(u, v int64) (int64, []int64) {
 	return h1[i1], append(h1[:i1], rev...)
 }
 
-func (g *BlossomGraph) ChangeRootFrom(b, r int64) {
+func (g *Graph) ChangeRootFrom(b, r int64) {
 	g.root[b] = r
 	if _, ok := g.children[b]; !ok {
 		return
