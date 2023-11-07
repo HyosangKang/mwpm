@@ -1,42 +1,38 @@
 package mwpm
 
-import "gonum.org/v1/gonum/graph"
-
-var _ (graph.Node) = Node{}
-
-const Eps = 1e-6
-
 type Node struct {
-	label            int8
-	id, root, parent int64
-	cycle, nodes     []int64
-	dval             float64
+	label           int
+	parent, blossom *Node
+	cycle           []*Node
+	children        map[*Node]struct{}
+	dval            float64
 }
 
-func (n Node) ID() int64 {
-	return n.id
-}
-
-func NewNode() Node {
-	return Node{
-		id:     -1,
-		root:   -1,
-		parent: -1,
+func NewNode() *Node {
+	return &Node{
+		label:   1,
+		parent:  nil,
+		blossom: nil,
 	}
 }
 
-func (n Node) DualVal() float64 {
-	return n.dval
+func (n *Node) Blossom() *Node {
+	if n.blossom == nil {
+		return n
+	}
+	return n.blossom.Blossom()
 }
 
-func (n Node) Label() int8 {
-	return n.label
+func (n *Node) Root() *Node {
+	if n.parent == nil {
+		return n
+	}
+	return n.parent.Root()
 }
 
-func (n Node) Root() int64 {
-	return n.root
-}
-
-func (n Node) IsBlossom() bool {
-	return len(n.cycle) > 0
+func (n *Node) Heritage(her []*Node) []*Node {
+	if n.parent == nil {
+		return append(her, n)
+	}
+	return n.parent.Heritage(append(her, n))
 }

@@ -1,18 +1,12 @@
 package mwpm
 
-import (
-	"gonum.org/v1/gonum/graph"
-)
-
 // Augment increases the matching. It is desribed in the following pictorial way:
 // (+) o        o (+)                o     o
-//
-//	   \     /   \                  I     I
-//	(-) o   o (-) o (-)   ----->    o     o   o
-//	    I e I     I                           I
-//	(+) o - o (+) o (+)             o +-+ o   o
-//	    u   v
-//
+//	    \     /   \                  I     I
+//   (-) o   o (-) o (-)   ----->    o     o   o
+//       I   I     I                           I
+//   (+) o - o (+) o (+)             o +-+ o   o
+//       u   v
 // In summary, we operates three things:
 // 0. Invert matching along the hierarchies from u and v
 // 1. Create a 'matched' blossom edge between u and v
@@ -21,78 +15,73 @@ import (
 // matchings in each blossom occurs recursively.
 // For example, if a new match is made to the node [0],
 // then new matchs are created in the blossom of [0]
-//
 //	      o - o                    o +-+ o
 //	[0] /       \                /         \
-//
 // +-+ o  -  o   o          +-+ o  -  o     o
-//
-//	|\   /    |    ---->     |\    I     I
-//	|  o      o              |  -  o     o
-//	 \       /                \         /
-//	   o - o                    o +-+ o
-//
+//     |\   /    |    ---->     |\    I     I
+//     |  o      o              |  -  o     o
+//      \       /                \         /
+//        o - o                    o +-+ o
 // All matchings in two blossoms must be wiped before create a match between two.
-func (g *Graph) Augment(e graph.WeightedEdge) {
-	u := g.Blossom(e.From().ID())
-	v := g.Blossom(e.To().ID())
 
-	// Find anscesters of two blossoms and remove all matchings
-	// and create a match beween blossoms in inverted way.
-	g.UnMatchBlossom(u)
-	g.UnMatchBlossom(v)
-	h := g.Heritage(u)
+func (t *Tree) Augment(n, m *Node) {
+	t.match[n] = m
+	t.match[m] = n
+	t.MatchFrom(n.Root())
+	t.MatchFrom(m.Root())
+
+	t.UnMatchBlossom(u)
+	t.UnMatchBlossom(v)
+	h := t.Heritage(u)
 	for i := 0; i < len(h)-1; i++ {
-		g.UnMatchEdgeBetween(h[i], h[i+1])
+		t.UnMatchEdgeBetween(h[i], h[i+1])
 	}
 	for i := 1; i < len(h)-1; i += 2 {
-		g.MatchEdgeBetween(h[i], h[i+1])
+		t.MatchEdgeBetween(h[i], h[i+1])
 	}
-	h = g.Heritage(v)
+	h = t.Heritage(v)
 	for i := 0; i < len(h)-1; i++ {
-		g.UnMatchEdgeBetween(h[i], h[i+1])
+		t.UnMatchEdgeBetween(h[i], h[i+1])
 	}
 	for i := 1; i < len(h)-1; i += 2 {
-		g.MatchEdgeBetween(h[i], h[i+1])
+		t.MatchEdgeBetween(h[i], h[i+1])
 	}
 
 	// Create a matched blossom edge between u and v.
-	g.SetEdge(u, v, e)
-	g.MatchEdgeBetween(u, v)
+	t.SetEdge(u, v, e)
+	t.MatchEdgeBetween(u, v)
 
 	// Remove tree. If an edge in tree is not a matached edge, remove it too.
 	// All labels are set to 0 as well.
-	g.RemoveTree(g.root[u])
-	g.RemoveTree(g.root[v])
+	t.RemoveTree(t.root[u])
+	t.RemoveTree(t.root[v])
+}
+
+// redefine matching between nodes in the tree from n.
+func (t *Tree) MatchFrom(n *Node) {
+	for m := range n.children {
+		if n.label > 0 {
+			t.match[n] = m
+			t.match[m] = n
+		} else {
+			delete(t.match, n)
+			delete(t.match, m)
+		}
+		t.MatchFrom(m)
+	}
+	n.label = 0
 }
 
 // Heriatage returns all anscesters from u to its root in the blossom graph.
-func (g *Graph) Heritage(u int64) []int64 {
+func (g *Tree) Heritage(u int64) []int64 {
 	if g.parent[u] == u {
 		return []int64{u}
 	}
 	return append([]int64{u}, g.Heritage(g.parent[u])...)
 }
 
-func (g *Graph) SetEdge(u, v int64, e graph.WeightedEdge) {
-	be := Bedge{
-		e:     e,
-		match: false,
-	}
-	if _, ok := g.edges[u]; ok {
-		g.edges[u][v] = be
-	} else {
-		g.edges[u] = map[int64]Bedge{v: be}
-	}
-	if _, ok := g.edges[v]; ok {
-		g.edges[v][u] = be
-	} else {
-		g.edges[v] = map[int64]Bedge{u: be}
-	}
-}
-
 // UnMatchBlossom recursively removes all matchings in blossom edges in the blossom.
-func (g *Graph) UnMatchBlossom(u int64) {
+func (g *Tree) UnMatchBlossom(u int64) {
 	if len(g.cycle[u]) == 1 {
 		return
 	}
@@ -121,7 +110,7 @@ func (g *Graph) UnMatchBlossom(u int64) {
 // UnMatchEdgeBetween removes matching bewteen blossoms u and v,
 // and wipes all matchs inside each blossom.
 // It assumes a blossom edge between u, v, and does not remove the edge.
-func (g *Graph) UnMatchEdgeBetween(u, v int64) {
+func (g *Tree) UnMatchEdgeBetween(u, v int64) {
 	be := g.edges[u][v]
 	be = Bedge{
 		e:     be.e,
@@ -136,7 +125,7 @@ func (g *Graph) UnMatchEdgeBetween(u, v int64) {
 // MatchEdgeBetween set the blossom edge between u, v,
 // and recursively create matchs in each blossoms.
 // There must be a blossom edges between u and v, a priori.
-func (g *Graph) MatchEdgeBetween(u, v int64) {
+func (g *Tree) MatchEdgeBetween(u, v int64) {
 	// fmt.Printf("Match edge between [%d] and [%d]\n", u, v)
 	be := g.edges[u][v]
 	be = Bedge{
@@ -161,7 +150,7 @@ func (g *Graph) MatchEdgeBetween(u, v int64) {
 // MatchBlossom matches the blossom edges in the blossom u provided that
 // node n is matched to a node out side of the blossom u.
 // It recursively create matches until no further match is available.
-func (g *Graph) MatchBlossom(u, n int64) {
+func (g *Tree) MatchBlossom(u, n int64) {
 	// fmt.Printf("Match blossom [%d] from [%d]\n", u, n)
 	if len(g.cycle[u]) == 1 {
 		return
@@ -199,7 +188,7 @@ func ContainsInt64(ns []int64, n int64) bool {
 // RemoveTree removes all information about tree from the root r.
 // It removes the edge between parent and child if they are connected by an unmatched edge.
 // It sets all labels of blossoms to 0. (and all nodes in it, recursively.)
-func (g *Graph) RemoveTree(r int64) {
+func (g *Tree) RemoveTree(r int64) {
 	delete(g.root, r)
 	delete(g.parent, r)
 	g.LabelAsZero(r)
@@ -218,7 +207,7 @@ func (g *Graph) RemoveTree(r int64) {
 }
 
 // LabelAsZero sets all labels of nodes/sub-blossoms in b as 0.
-func (g *Graph) LabelAsZero(b int64) {
+func (g *Tree) LabelAsZero(b int64) {
 	g.label[b] = 0
 	if len(g.cycle[b]) == 1 {
 		return

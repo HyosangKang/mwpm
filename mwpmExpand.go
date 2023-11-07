@@ -19,7 +19,7 @@ package mwpm
 // Nodes that are not added to the tree is matched pairwise.
 // Since b is a negative blossom (>3 nodes),
 // there are always a parent and a child of negative blossom
-func (g *Graph) Expand(b int64) {
+func (g *Tree) Expand(b int64) {
 	p := g.parent[b]
 	c := g.children[b][0]
 
@@ -158,7 +158,7 @@ func (g *Graph) Expand(b int64) {
 }
 
 // RemoveEdge deletes the blossom edge between blossom u and v.
-func (g *Graph) RemoveEdge(u, v int64) {
+func (g *Tree) RemoveEdge(u, v int64) {
 	delete(g.edges[u], v)
 	delete(g.edges[v], u)
 }
