@@ -3,19 +3,22 @@ package mwpm
 import "math"
 
 type Node struct {
-	label           int
-	parent          *Node
-	blossom         *Node // blossom that contains this node (nil if the node is not in a blossom )
-	cycle, children []*Node
-	dval            float64
+	label    int
+	parent   *Node   // directs to non-blossom node
+	children []*Node // directs to non-blossom node
+	blossom  *Node   // immediate blossom that contains this node (nil if the node is the outermost blossom)
+	// blossom *Blossom
+	cycle []*Node // remove later
+	dval  float64
 }
 
 const Eps = 1e-6
 
 func NewNode() *Node {
 	return &Node{
-		label:  1,
-		parent: nil,
+		label:   1,
+		parent:  nil,
+		blossom: nil,
 	}
 }
 
@@ -34,20 +37,20 @@ func (n *Node) Root() *Node {
 	return n.parent.Root()
 }
 
-func (n *Node) Anscesters() []*Node {
+func (n *Node) anscesters() []*Node {
 	if n.parent == nil {
 		return []*Node{n}
 	}
-	return append([]*Node{n}, n.parent.Anscesters()...)
+	return append([]*Node{n}, n.parent.anscesters()...)
 }
 
-func (n *Node) Descendants() []*Node {
+func (n *Node) descendants() []*Node {
 	if len(n.children) == 0 {
 		return []*Node{n}
 	}
 	nodes := []*Node{n}
 	for _, c := range n.children {
-		nodes = append(nodes, c.Descendants()...)
+		nodes = append(nodes, c.descendants()...)
 	}
 	return nodes
 }
