@@ -17,8 +17,9 @@ import (
 // All nodes are called 'blossom', if stated otherwise.
 // (Technically, a blossom means a set of more than one nodes.)
 // All blossoms are called by its id(int64).
-func MinimumWeightPerfectMatching(g graph.Weighted) ([][2]int64, bool) {
-	if g.Nodes().Len()%2 == 1 {
+func Run(g graph.Weighted) (map[int64]int64, bool) {
+	num := g.Nodes().Len()
+	if num%2 == 1 {
 		return nil, false
 	}
 	t := NewTree(g)
@@ -39,8 +40,8 @@ func MinimumWeightPerfectMatching(g graph.Weighted) ([][2]int64, bool) {
 					t.Shrink(n, m)
 				}
 			}
-		} else if b := t.NegBlossom(); b > -1 {
-			t.Expand(b)
+		} else if n := t.NegBlossom(); n != nil {
+			t.Expand(n)
 		} else {
 			d := t.Delta()
 			if math.IsInf(d, +1) || d < 0 {
@@ -48,16 +49,130 @@ func MinimumWeightPerfectMatching(g graph.Weighted) ([][2]int64, bool) {
 			}
 			t.DualUpdate(t.Delta())
 		}
-		// Abort loop if number of matched nodes equal to the total nubmer of nodes.
-		// This happends only when all nodes are matched
-		// because matching only counts between nodes, not blossoms.
-		match = t.Match()
-		if len(match) == num/2 {
+		if len(t.match) == num {
 			break
 		}
 	}
-	return match, true
+	return t.Match(), true
 }
 
-// A BlossomEdge consists of WeightedEdge and isMatch(bool)
-// Two blossoms should be connected by a BlossomEdge only.
+// returns the ids of nodes on a tight edge (slack = 0)
+func (t *Tree) TightEdge() (uid, vid int64) {
+	for nid, edges := range t.edges {
+		for mid, _ := range edges {
+			if mid <= nid {
+				continue
+			}
+			if t.slack([2]int64{nid, mid}) == 0 {
+				return nid, mid
+			}
+		}
+	}
+	return -1, -1
+}
+
+// returns the slack of an edge e = (u, v) (u, v are not blossoms)
+// slack(e) = weight(e) - sum of all dual values of blossoms (including u, v) that containig u and v
+func (g *Tree) slack(ids [2]int64) float64 {
+	s := g.edges[ids[0]][ids[1]]
+	for i := 0; i < 2; i++ {
+		n := g.nodes[ids[i]]
+		for n != nil {
+			s -= n.dval
+			n = n.blossom
+		} 
+	}
+	return s
+}
+
+// returns a blossom of -1 label and 0 dual value.
+func (t *Tree) NegBlossom() *Node {
+	for _, n := range t.Nodes() {
+		if n.IsBlossom() && n.label == -1 && n.IsDvalZero() {
+			return n
+		}
+	}
+	return nil
+}
+
+// 0:GROW, 1:AUGMENT, 2:SHRINK, 3:EXPAND
+// Delta returns the minimum value among four types of values:
+// slack(u,v) if the edge e=(u,v) is of case 0;
+// slack(u,v)/2 if the edge e=(u,v) is of case 1 or 2;
+// dualValue(b) if b is a blossom (>3 nodes) of -1 label.
+func (t *Tree) Delta() float64 {
+	var delta float64 = math.MaxFloat64
+	nodes := t.Nodes()
+	for i, n := range nodes {
+		nb := n.Blossom()
+		for j, m := range nodes {
+			mb := m.Blossom()
+			if (nb.label == 0 & mb.label == 1) || (nb.label == 1 && mb.label == 0) { // GROW
+				slack := t.slack([2]int64{i, j})
+				if delta > slack {
+					delta = slack
+				}
+			} else if nb.label == 1 && mb.label == 1 {
+				slack := t.slack([2]int64{i, j})
+				if delta > slack/2 {
+					delta = slack / 2
+				}
+				if nb.Root() != mb.Root() { // AUGMENT
+				} else { // SHRINK
+				}
+			}
+		}
+		if nb.label == -1 && (delta > nb.dval) { // EXPAND
+			delta = nb.dval
+		}
+	}
+
+		for mid, _ := range edges {
+			if mid <= nid {
+				continue
+			}
+		if c != -1 {
+			s := g.Slack(e)
+			if c > 0 {
+				s /= 2
+			}
+			if d > s {
+				d = s
+			}
+		}
+	}
+	for n, l := range g.label {
+		if l == -1 {
+			if len(g.cycle[n]) > 1 {
+				if d > g.dval[n] {
+					d = g.dval[n]
+				}
+			}
+		}
+	}
+	return d
+}
+
+// DualUpdate updates the dual values of all blossoms according to their label.
+// It adds d if the label is +1, substract d if the label is -1.
+func (g *Tree) DualUpdate(d float64) {
+	for n, l := range g.label {
+		if l == 1 {
+			g.dval[n] += d
+		} else if l == -1 {
+			g.dval[n] -= d
+		}
+	}
+}
+
+func (t *Tree) Match() map[int64]int64 {
+	inv := make(map[*Node]int64)
+	for id, n := range t.nodes {
+		inv[n] = id
+	}
+	new := make(map[int64]int64)
+	for n, m := range t.match {
+		new[inv[n]] = inv[m]
+	}
+	return new
+}
