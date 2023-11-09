@@ -8,7 +8,7 @@ type Node struct {
 	children []*Node // directs to non-blossom node
 	blossom  *Node   // immediate blossom that contains this node (nil if the node is the outermost blossom)
 	// blossom *Blossom
-	cycle []*Node // remove later
+	cycle [][3]*Node // cycle of nodes (blossom, start, end)
 	dval  float64
 	temp  int64
 }
@@ -45,13 +45,29 @@ func (n *Node) anscesters() []*Node {
 	return append([]*Node{n}, n.parent.anscesters()...)
 }
 
+// return ALL node (not blossom) descendants from the blossom containing n
 func (n *Node) descendants() []*Node {
-	if len(n.children) == 0 {
-		return []*Node{n}
+	nb := n.Blossom()
+	if len(nb.children) == 0 {
+		if nb == n {
+			return []*Node{n}
+		}
+		return n.all()
 	}
 	nodes := []*Node{n}
 	for _, c := range n.children {
 		nodes = append(nodes, c.descendants()...)
+	}
+	return nodes
+}
+
+func (n *Node) all() []*Node {
+	if n.blossom == nil {
+		return []*Node{n}
+	}
+	nodes := []*Node{}
+	for _, c := range n.cycle {
+		nodes = append(nodes, c[0].all()...)
 	}
 	return nodes
 }

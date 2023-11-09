@@ -40,7 +40,7 @@ func Run(g graph.Weighted) (map[int64]int64, bool) {
 			break
 		}
 	}
-	return t.match(), true
+	return t.pair(), true
 }
 
 // dualUpdate updates the dual values of all blossoms according to their label.
@@ -52,11 +52,13 @@ func (t *Tree) dualUpdate() (int, [2]*Node) {
 	for i, n := range t.nodes {
 		nb := n.Blossom()
 		for j, m := range t.nodes {
-			if i >= j || !t.g.HasEdgeBetween(i, j) {
+			mb := m.Blossom()
+			if i >= j || !t.g.HasEdgeBetween(i, j) || nb == mb {
 				continue
 			}
 			slack := t.slack([2]int64{i, j})
-			mb := m.Blossom()
+			// fmt.Printf("checking slack between %d and %d: %.2f\n", i, j, slack)
+			// fmt.Printf("labels: %d %d\n", nb.label, mb.label)
 			if (nb.label == 0 && mb.label == 1) || (nb.label == 1 && mb.label == 0) { // GROW
 				if delta > slack {
 					delta = slack
@@ -75,6 +77,7 @@ func (t *Tree) dualUpdate() (int, [2]*Node) {
 				}
 			}
 			if delta == 0 {
+
 				return c, s
 			}
 		}
@@ -112,7 +115,7 @@ func (t *Tree) slack(ids [2]int64) float64 {
 	return s
 }
 
-func (t *Tree) match() map[int64]int64 {
+func (t *Tree) pair() map[int64]int64 {
 	inv := make(map[*Node]int64)
 	for id, n := range t.nodes {
 		inv[n] = id
@@ -133,10 +136,10 @@ func (t *Tree) match() map[int64]int64 {
 func (t *Tree) grow(s [2]*Node) {
 	fmt.Printf("%d %d\n", s[0].temp, s[1].temp)
 	n, m := s[0], s[1]
-	nb, mb := n.Blossom(), m.Blossom()
-	if nb.label == 0 {
+	if n.Blossom().label == 0 {
 		n, m = m, n
 	}
+	nb, mb := n.Blossom(), m.Blossom()
 	l := t.tight[m]   // node (not blossom) matched to mb
 	lb := l.Blossom() // blossom containing l
 	/* tree from nb to mb */
@@ -165,19 +168,57 @@ func (t *Tree) grow(s [2]*Node) {
 func (t *Tree) augment(s [2]*Node) {
 	fmt.Printf("%d %d\n", s[0].temp, s[1].temp)
 	n, m := s[0], s[1]
-	t.tight[n], t.tight[m] = m, n
 	for _, l := range s {
-		for u := l; u.parent != nil; u = u.parent {
-			if u.Blossom().label < 0 {
-				t.tight[u], t.tight[u.parent] = u.parent, u
+		lb := l.Blossom()
+		for lb.parent != nil {
+			var u *Node
+			for _, u = range lb.parent.Blossom().children {
+				if u.Blossom() == lb {
+					break
+				}
 			}
+			v := u.Blossom().parent
+			if lb.label > 0 {
+				delete(t.tight, u)
+				delete(t.tight, v)
+			} else {
+				t.tight[u], t.tight[v] = v, u
+			}
+			lb = lb.parent.Blossom()
 		}
 		r := l.Root()
 		for _, u := range r.descendants() {
 			t.Free(u)
-			fmt.Printf("label of %d set to %d\n", u.temp, u.label)
 		}
 		delete(t.roots, r)
+	}
+	t.tight[n], t.tight[m] = m, n
+	t.match(n, n.Blossom())
+	t.match(m, m.Blossom())
+}
+
+// recursively match node n in the blossom b (recursive).
+func (t *Tree) match(n, b *Node) {
+	if n == b {
+		return
+	}
+	nb := n // nb is the outermost blossom of n within b
+	for nb.blossom != b {
+		nb = nb.blossom
+	}
+	/* reorder cycle */
+	var i int
+	for i = 0; i < len(b.cycle); i++ {
+		if b.cycle[i][0] == nb {
+			break
+		}
+	}
+	cycle := append(b.cycle[i:], b.cycle[:i]...)
+	/* match nodes */
+	for i = 1; i < len(cycle); i += 2 {
+		t.tight[cycle[i][1]], t.tight[cycle[i][2]] = cycle[i][2], cycle[i][1]
+		t.match(cycle[i][1], cycle[i][0])
+		t.match(cycle[i][2], cycle[i+1][0])
 	}
 }
 
@@ -197,39 +238,35 @@ func (t *Tree) augment(s [2]*Node) {
 func (t *Tree) shrink(s [2]*Node) {
 	fmt.Printf("%d %d\n", s[0].temp, s[1].temp)
 	n, m := s[0], s[1]
-	nn := NewNode()
-	nn.label = 1
-	nn.cycle = t.cycle(n, m)       // cycle, the first is the common parent
-	nn.parent = nn.cycle[0].parent // grandparent is now new parent
-	if nn.parent != nil {
-		nn.parent.children = []*Node{nn.cycle[0]}
+	nb := NewNode() // new blossom
+	nb.label = 1
+	nb.cycle = t.cycle(n, m) // cycle, the first is the common parent
+	fmt.Printf("CYCLE")
+	for _, l := range nb.cycle { // print cycle
+		fmt.Printf(" %d->%d ", l[1].temp, l[2].temp)
 	}
-	for _, l := range nn.cycle {
-		lb := l.Blossom()
-		lb.blossom = nn
-		if lb.label == -1 {
-			u := t.tight[l]
-			delete(t.tight, l)
-			delete(t.tight, u)
-		}
-		nn.children = append(nn.children, lb.children...)
+	nb.parent = nb.cycle[0][0].parent
+	for _, ls := range nb.cycle {
+		delete(t.tight, ls[1])
+		delete(t.tight, ls[2])
+		nb.children = append(nb.children, ls[0].children...)
 	}
 	/* remove nodes in the cycle as children */
-	for _, u := range nn.cycle {
+	for _, u := range nb.cycle {
 		var l *Node
 		var i int
-		for i, l = range nn.children {
-			if l == u {
+		for _, l = range nb.children {
+			if l.Blossom() == u[0].Blossom() {
 				l = nil
 				break
 			}
 		}
-		if i < len(nn.children) {
-			nn.children = append(nn.children[:i], nn.children[i+1:]...)
+		if l == nil {
+			nb.children = append(nb.children[:i], nb.children[i+1:]...)
 		}
 	}
-	for _, l := range nn.cycle {
-		l.label = 0
+	for _, ls := range nb.cycle {
+		ls[0].label = 0
 	}
 }
 
@@ -242,11 +279,18 @@ func (t *Tree) shrink(s [2]*Node) {
 // [0] o     o [3]
 //	   n     m
 
-func (t *Tree) cycle(n, m *Node) []*Node {
+func (t *Tree) cycle(n, m *Node) [][3]*Node {
 	hen := n.anscesters()
 	hem := m.anscesters()
 	fmt.Println("ANSCESTERS")
-	fmt.Println(hen, hem)
+	for _, l := range hen {
+		fmt.Printf("%d ", l.temp)
+	}
+	fmt.Println()
+	for _, l := range hem {
+		fmt.Printf("%d ", l.temp)
+	}
+	fmt.Println()
 	var i1, i2 int
 	var nn, mm *Node
 	for i1, nn = range hen {
@@ -257,45 +301,61 @@ func (t *Tree) cycle(n, m *Node) []*Node {
 		}
 	}
 FOUND:
-	rev := []*Node{}
-	for i := i2; i >= 0; i-- {
-		rev = append(rev, hem[i])
+	rev := [][3]*Node{}
+	for i := i2; i > 0; i-- {
+		rev = append(rev, [3]*Node{hem[i].Blossom(), hem[i], hem[i-1]})
 	}
-	return append(rev, hen[:i1]...)
-
+	rev = append(rev, [3]*Node{hem[0].Blossom(), hem[0], n})
+	for i := 0; i < i1; i++ {
+		rev = append(rev, [3]*Node{hen[i].Blossom(), hen[i], hen[i+1]})
+	}
+	return rev
 }
 
 // EXPAND removes b and add nodes in b to the tree.
 // The decision which nodes belong to tree depends on positions of nodes in the cycle.
 // For example, if we expand a blossom n consists of [1,2,3], we obtain
-//                   [4] o                       [4] o
+//                   [4] o u                     [4] o
 //                       |                           |
 //  [3] o --- o [2]    n o (-)                   [3] o +-+ o [2]
 //      |  n  /          |            ------->            /
 //  [1] o --             |                       [1] o --
 //                       |                           I
-//                   [0] o                       [0] o
+//                   [0] o v                     [0] o
 // Nodes that are not added to the tree is matched pairwise.
 
-func (t *Tree) expand(n *Node) {
-	/* expand tree */
-	nb := n.Blossom()
+func (t *Tree) expand(b *Node) {
+	/* reorder the cycle start from one that is connected to its parent */
+	nb := b.Blossom()
+	u := nb.parent
 	var i int
 	for i := 0; i < len(nb.cycle); i++ {
-		if nb.cycle[i] == n {
+		if nb.cycle[i][0].parent == nb {
 			break
 		}
 	}
-	cycle := append(n.cycle[i:], n.cycle[1:i]...)
-	var child *Node = nil
-	if len(n.Blossom().children) > 0 {
-		child = n.Blossom().children[0]
+	cycle := append(b.cycle[i:], b.cycle[1:i]...)
+	i = len(nb.cycle)
+	if len(nb.children) > 0 {
+		cb := nb.children[0].Blossom()
+		for j, c := range nb.cycle {
+			if c[0].children[0].Blossom() == cb {
+				i = j
+				break
+			}
+		}
 	}
+	for j := 0; j < i; j++ {
+		if cycle[j][0].label > 0 {
+		}
+		cycle[j][0].children
+	}
+
 	for i = 0; i < len(cycle)-1; i++ {
 		l, m := cycle[i], cycle[i+1]
 		if i%2 == 0 { // match nodes
 			if len(l.Blossom().children) > 0 {
-				if l.Blossom().children[0] == child {
+				if l.Blossom().children[0] == v {
 					break
 				}
 			}
@@ -309,13 +369,13 @@ func (t *Tree) expand(n *Node) {
 	}
 	/* match nodes that are not added to the tree */
 	for j := i + 1; j < len(cycle)-1; j += 2 {
-		l, m := n.cycle[j], n.cycle[j+1]
+		l, m := b.cycle[j], b.cycle[j+1]
 		t.tight[l], t.tight[m] = m, l
 		t.Free(l)
 		t.Free(m)
 	}
 	/* remove the blossom */
-	for _, l := range n.cycle {
+	for _, l := range b.cycle {
 		for l.blossom != nb {
 			l = l.blossom
 		}
