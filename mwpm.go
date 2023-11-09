@@ -18,7 +18,7 @@ func Run(g graph.Weighted) (map[int64]int64, bool) {
 	}
 	t := NewTree(g)
 	for {
-		c, s := t.DualUpdate()
+		c, s := t.dualUpdate()
 		switch c {
 		case 0:
 			t.grow(s)
@@ -36,9 +36,9 @@ func Run(g graph.Weighted) (map[int64]int64, bool) {
 	return t.match(), true
 }
 
-// DualUpdate updates the dual values of all blossoms according to their label.
+// dualUpdate updates the dual values of all blossoms according to their label.
 // It adds d if the label is +1, substract d if the label is -1.
-func (t *Tree) DualUpdate() (int, [2]*Node) {
+func (t *Tree) dualUpdate() (int, [2]*Node) {
 	var delta, dval float64 = math.MaxFloat64, math.MaxFloat64
 	var c int = -1
 	var s, y [2]*Node
@@ -127,14 +127,13 @@ func (t *Tree) grow(s [2]*Node) {
 	lb := l.Blossom() // blossom containing l
 	/* tree from nb to mb */
 	nb.children = append(nb.children, m)
-	mb.parent = n
-	mb.children = []*Node{l}
 	n.children = []*Node{m}
+	mb.parent = n
 	m.parent = n
 	/* tree from m to l */
 	mb.children = []*Node{l}
-	lb.parent = m
 	m.children = []*Node{l}
+	lb.parent = m
 	l.parent = m
 	/* relabel */
 	mb.label = -1
@@ -185,9 +184,22 @@ func (t *Tree) shrink(s [2]*Node) {
 	nn.label = 1
 	nn.cycle = t.cycle(n, m)       // cycle, the first is the common parent
 	nn.parent = nn.cycle[0].parent // grandparent is now new parent
-	for _, l := range nn.cycle[1:] {
-		if len(l.children) > 0 {
-			nn.cycle[0].children = append(nn.cycle[0].children, l.children...)
+	for _, l := range nn.cycle {
+		l.Blossom().blossom = nn
+		nn.children = append(nn.children, l.children...)
+	}
+	/* remove nodes in the cycle as children */
+	for _, u := range nn.cycle {
+		var l *Node
+		var i int
+		for i, l = range nn.children {
+			if l == u {
+				l = nil
+				break
+			}
+		}
+		if l == nil {
+			nn.children = append(nn.children[:i], nn.children[i+1:]...)
 		}
 	}
 	for _, l := range nn.cycle {
