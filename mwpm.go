@@ -1,6 +1,7 @@
 package mwpm
 
 import (
+	"fmt"
 	"math"
 
 	"gonum.org/v1/gonum/graph"
@@ -16,17 +17,23 @@ func Run(g graph.Weighted) (map[int64]int64, bool) {
 	if num%2 == 1 {
 		return nil, false
 	}
+	fmt.Println("Making a tree...")
 	t := NewTree(g)
 	for {
+		fmt.Println("Dual update...")
 		c, s := t.dualUpdate()
 		switch c {
 		case 0:
+			fmt.Println("GROW")
 			t.grow(s)
 		case 1:
+			fmt.Println("AUGMENT")
 			t.augment(s)
 		case 2:
+			fmt.Println("SHRINK")
 			t.shrink(s)
 		case 3:
+			fmt.Println("EXPAND")
 			t.expand(s[0])
 		}
 		if len(t.tight) == num {
@@ -45,16 +52,18 @@ func (t *Tree) dualUpdate() (int, [2]*Node) {
 	for i, n := range t.nodes {
 		nb := n.Blossom()
 		for j, m := range t.nodes {
+			if i >= j || !t.g.HasEdgeBetween(i, j) {
+				continue
+			}
+			slack := t.slack([2]int64{i, j})
 			mb := m.Blossom()
 			if (nb.label == 0 && mb.label == 1) || (nb.label == 1 && mb.label == 0) { // GROW
-				slack := t.slack([2]int64{i, j})
 				if delta > slack {
 					delta = slack
 					c = 0
 					s = [2]*Node{n, m}
 				}
 			} else if nb.label == 1 && mb.label == 1 {
-				slack := t.slack([2]int64{i, j})
 				if delta > slack/2 {
 					delta = slack / 2
 					s = [2]*Node{n, m}
@@ -64,6 +73,9 @@ func (t *Tree) dualUpdate() (int, [2]*Node) {
 						c = 2
 					}
 				}
+			}
+			if delta == 0 {
+				return c, s
 			}
 		}
 		if nb.label == -1 && (dval > nb.dval) { // EXPAND
@@ -76,8 +88,9 @@ func (t *Tree) dualUpdate() (int, [2]*Node) {
 		s = y
 		c = 3
 	}
+	fmt.Printf("delta: %.2f\n", delta)
 	/* update dval */
-	if math.Abs(delta) > Eps {
+	if delta != 0 {
 		for n := range t.Blossoms() {
 			n.dval += float64(n.label) * delta
 		}
@@ -87,10 +100,10 @@ func (t *Tree) dualUpdate() (int, [2]*Node) {
 
 // returns the slack of an edge e = (u, v) (u, v are not blossoms)
 // slack(e) = weight(e) - sum of all dual values of blossoms (including u, v) that containig u and v
-func (g *Tree) slack(ids [2]int64) float64 {
-	s := g.edges[ids[0]][ids[1]]
+func (t *Tree) slack(ids [2]int64) float64 {
+	s, _ := t.g.Weight(ids[0], ids[1])
 	for _, id := range ids {
-		n := g.nodes[id]
+		n := t.nodes[id]
 		for n != nil {
 			s -= n.dval
 			n = n.blossom
@@ -118,6 +131,7 @@ func (t *Tree) match() map[int64]int64 {
 //	   m   l                 m   l
 
 func (t *Tree) grow(s [2]*Node) {
+	fmt.Printf("%d %d\n", s[0].temp, s[1].temp)
 	n, m := s[0], s[1]
 	nb, mb := n.Blossom(), m.Blossom()
 	if nb.label == 0 {
@@ -127,7 +141,7 @@ func (t *Tree) grow(s [2]*Node) {
 	lb := l.Blossom() // blossom containing l
 	/* tree from nb to mb */
 	nb.children = append(nb.children, m)
-	n.children = []*Node{m}
+	n.children = append(n.children, m)
 	mb.parent = n
 	m.parent = n
 	/* tree from m to l */
@@ -149,6 +163,7 @@ func (t *Tree) grow(s [2]*Node) {
 //       n   m
 
 func (t *Tree) augment(s [2]*Node) {
+	fmt.Printf("%d %d\n", s[0].temp, s[1].temp)
 	n, m := s[0], s[1]
 	t.tight[n], t.tight[m] = m, n
 	for _, l := range s {
@@ -158,8 +173,9 @@ func (t *Tree) augment(s [2]*Node) {
 			}
 		}
 		r := l.Root()
-		for _, v := range r.descendants() {
-			t.Free(v.Blossom())
+		for _, u := range r.descendants() {
+			t.Free(u)
+			fmt.Printf("label of %d set to %d\n", u.temp, u.label)
 		}
 		delete(t.roots, r)
 	}
@@ -179,14 +195,24 @@ func (t *Tree) augment(s [2]*Node) {
 // It does not remove the nodes, but there are changes in tree and blossom edges.
 
 func (t *Tree) shrink(s [2]*Node) {
+	fmt.Printf("%d %d\n", s[0].temp, s[1].temp)
 	n, m := s[0], s[1]
 	nn := NewNode()
 	nn.label = 1
 	nn.cycle = t.cycle(n, m)       // cycle, the first is the common parent
 	nn.parent = nn.cycle[0].parent // grandparent is now new parent
+	if nn.parent != nil {
+		nn.parent.children = []*Node{nn.cycle[0]}
+	}
 	for _, l := range nn.cycle {
-		l.Blossom().blossom = nn
-		nn.children = append(nn.children, l.children...)
+		lb := l.Blossom()
+		lb.blossom = nn
+		if lb.label == -1 {
+			u := t.tight[l]
+			delete(t.tight, l)
+			delete(t.tight, u)
+		}
+		nn.children = append(nn.children, lb.children...)
 	}
 	/* remove nodes in the cycle as children */
 	for _, u := range nn.cycle {
@@ -198,7 +224,7 @@ func (t *Tree) shrink(s [2]*Node) {
 				break
 			}
 		}
-		if l == nil {
+		if i < len(nn.children) {
 			nn.children = append(nn.children[:i], nn.children[i+1:]...)
 		}
 	}
@@ -219,6 +245,8 @@ func (t *Tree) shrink(s [2]*Node) {
 func (t *Tree) cycle(n, m *Node) []*Node {
 	hen := n.anscesters()
 	hem := m.anscesters()
+	fmt.Println("ANSCESTERS")
+	fmt.Println(hen, hem)
 	var i1, i2 int
 	var nn, mm *Node
 	for i1, nn = range hen {
@@ -242,7 +270,7 @@ FOUND:
 // For example, if we expand a blossom n consists of [1,2,3], we obtain
 //                   [4] o                       [4] o
 //                       |                           |
-//  [3] o --- o [2]    n o                       [3] o +-+ o [2]
+//  [3] o --- o [2]    n o (-)                   [3] o +-+ o [2]
 //      |  n  /          |            ------->            /
 //  [1] o --             |                       [1] o --
 //                       |                           I
@@ -251,31 +279,44 @@ FOUND:
 
 func (t *Tree) expand(n *Node) {
 	/* expand tree */
+	nb := n.Blossom()
 	var i int
-	for i = 0; i < len(n.cycle)-1; i++ {
-		l, m := n.cycle[i], n.cycle[i+1]
-		l.Blossom().children = []*Node{m}
-		m.Blossom().parent = l
-		if i%2 == 0 { // match nodes
-			t.tight[l], t.tight[m] = m, l
-			l.Blossom().label = -1
-		} else {
-			l.Blossom().label = 1
-		}
-		if len(l.Blossom().children) > 0 {
+	for i := 0; i < len(nb.cycle); i++ {
+		if nb.cycle[i] == n {
 			break
 		}
 	}
+	cycle := append(n.cycle[i:], n.cycle[1:i]...)
+	var child *Node = nil
+	if len(n.Blossom().children) > 0 {
+		child = n.Blossom().children[0]
+	}
+	for i = 0; i < len(cycle)-1; i++ {
+		l, m := cycle[i], cycle[i+1]
+		if i%2 == 0 { // match nodes
+			if len(l.Blossom().children) > 0 {
+				if l.Blossom().children[0] == child {
+					break
+				}
+			}
+			t.tight[l], t.tight[m] = m, l
+			l.Blossom().label, m.Blossom().label = -1, 1
+		} else {
+			l.Blossom().label, m.Blossom().label = 1, -1
+		}
+		l.Blossom().children = []*Node{m}
+		m.Blossom().parent = l
+	}
 	/* match nodes that are not added to the tree */
-	for j := i + 1; j < len(n.cycle)-1; j += 2 {
+	for j := i + 1; j < len(cycle)-1; j += 2 {
 		l, m := n.cycle[j], n.cycle[j+1]
 		t.tight[l], t.tight[m] = m, l
-		t.Free(l.Blossom())
-		t.Free(m.Blossom())
+		t.Free(l)
+		t.Free(m)
 	}
 	/* remove the blossom */
 	for _, l := range n.cycle {
-		for l.blossom != n {
+		for l.blossom != nb {
 			l = l.blossom
 		}
 		l.blossom = nil

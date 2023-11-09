@@ -10,6 +10,7 @@ type Node struct {
 	// blossom *Blossom
 	cycle []*Node // remove later
 	dval  float64
+	temp  int64
 }
 
 const Eps = 1e-6

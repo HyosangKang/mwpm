@@ -5,35 +5,38 @@ import (
 )
 
 type Tree struct {
+	g     graph.Weighted
 	roots map[*Node]struct{}
 	nodes map[int64]*Node
-	edges map[int64]map[int64]float64
+	temp  map[*Node]int64
 	tight map[*Node]*Node // blossom -> node
 }
 
 func NewTree(wg graph.Weighted) *Tree {
 	t := &Tree{
+		g:     wg,
 		roots: make(map[*Node]struct{}),
 		nodes: make(map[int64]*Node),
-		edges: make(map[int64]map[int64]float64),
+		// edges: make(map[int64]map[int64]float64),
 		tight: make(map[*Node]*Node),
 	}
 	nodes := wg.Nodes()
 	for nodes.Next() {
 		nid := nodes.Node().ID()
 		n := NewNode()
+		n.temp = nid
 		t.roots[n] = struct{}{}
 		t.nodes[nid] = n
-		modes := wg.Nodes()
-		for modes.Next() {
-			mid := modes.Node().ID()
-			if wg.HasEdgeBetween(nid, mid) {
-				if _, ok := t.edges[nid]; !ok {
-					t.edges[nid] = make(map[int64]float64)
-				}
-				t.edges[nid][mid], _ = wg.Weight(nid, mid)
-			}
-		}
+		// modes := wg.Nodes()
+		// for modes.Next() {
+		// 	mid := modes.Node().ID()
+		// 	if wg.HasEdgeBetween(nid, mid) {
+		// 		if _, ok := t.edges[nid]; !ok {
+		// 			t.edges[nid] = make(map[int64]float64)
+		// 		}
+		// 		t.edges[nid][mid], _ = wg.Weight(nid, mid)
+		// 	}
+		// }
 	}
 	return t
 }
@@ -55,8 +58,6 @@ func (t *Tree) Blossoms() map[*Node]struct{} {
 
 // turn the node into a free node.
 func (t *Tree) Free(n *Node) {
-	if n.label > 0 {
-		delete(t.roots, n)
-	}
-	n.label = 0
+	delete(t.roots, n)
+	n.Blossom().label = 0
 }
