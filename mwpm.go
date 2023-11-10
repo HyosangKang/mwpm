@@ -81,7 +81,6 @@ func (t *Tree) dualUpdate() (int, [2]*Node) {
 				}
 			}
 			if delta == 0 {
-
 				return c, s
 			}
 		}
@@ -129,32 +128,17 @@ func (t *Tree) grow(s [2]*Node) {
 	if n.Blossom().label == 0 {
 		n, m = m, n
 	}
-	l := t.tight[m] // node (not blossom) matched to mb
-	/* tree from nb to mb */
-	for _, u := range n.AllBlossoms() {
-		if u == n {
-			u.children = []*Node{m}
-		} else {
-			u.children = append(u.children, m)
-		}
-	}
-	for _, u := range m.AllBlossoms() {
-		u.parent = n
-	}
-	/* tree from m to l */
-	for _, u := range m.AllBlossoms() {
-		if u == n {
-			u.children = []*Node{m}
-		} else {
-			u.children = append(u.children, m)
-		}
-	}
-	for _, u := range l.AllBlossoms() {
-		u.parent = m
-	}
-	/* relabel */
-	m.Blossom().label = -1
-	l.Blossom().label = 1
+	l := t.tight[m]
+	n, m, l = n.Blossom(), m.Blossom(), l.Blossom()
+	/* set parent-child relationship for n and m */
+	n.children = append(n.children, m)
+	m.parent = n
+	/* set parent-child relationship for m and l */
+	m.children = []*Node{l}
+	l.parent = m
+	/* re-label */
+	m.label = -1
+	l.label = 1
 }
 
 // AUGMENT increases the number of matchings.
@@ -170,45 +154,29 @@ func (t *Tree) augment(s [2]*Node) {
 	/* remove all tight edges from n and m to their roots */
 	/* while doing so, set the tight edges */
 	for _, l := range s {
-		lb := l.Blossom()
-		for lb.parent != nil {
+		l := l.Blossom()
+		for l.parent != nil {
 			/* u is the child node and v is the parent node */
+			v := l.parent
 			var u *Node
-			for _, u = range lb.parent.Blossom().children {
-				if u.Blossom() == lb {
+			for _, u = range l.parent.Blossom().children {
+				if u.Blossom() == l {
 					break
 				}
 			}
-			v := u.Blossom().parent
-			u.show()
-			v.show()
 			if u.Blossom().label > 0 {
 				t.RemoveTight([2]*Node{u, v})
-				fmt.Printf("remove tight between %d and %d\n", u.temp, v.temp)
 			} else {
-				t.tight[u], t.tight[v] = v, u
-				t.MakeTight(u, u.Blossom())
-				t.MakeTight(v, v.Blossom())
+				t.SetTight([2]*Node{u, v})
 			}
-			lb = lb.parent.Blossom()
+			l = l.parent.Blossom()
 		}
-		/* remove all ancestry of the tree of l */
-		unique := make(map[*Node]struct{})
-		for _, u := range lb.descendents() {
-			for u != nil {
-				if _, ok := unique[u]; ok {
-					break
-				}
-				unique[u] = struct{}{}
-				t.SetFree(u)
-				u = u.blossom
-			}
+		/* set all nodes in two trees as free */
+		for _, u := range l.descendents() {
+			t.SetFree(u)
 		}
-		delete(t.roots, lb)
 	}
-	t.tight[n], t.tight[m] = m, n
-	t.MakeTight(n, n.Blossom())
-	t.MakeTight(m, m.Blossom())
+	t.SetTight([2]*Node{n, m})
 }
 
 // SHRINK makes a new blossom consists of nodes in a tree,

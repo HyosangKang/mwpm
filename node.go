@@ -57,18 +57,15 @@ func (n *Node) anscestary() (chain []*Node, cycle [][2]*Node) {
 	return
 }
 
-// return ALL node (not blossom) descendants from the blossom containing n
+// return ALL child blossom nodes from n
 func (n *Node) descendents() []*Node {
-	nb := n.Blossom()
-	if len(nb.children) == 0 {
-		if nb == n {
-			return []*Node{n}
-		}
-		return n.all()
+	n = n.Blossom()
+	if len(n.children) == 0 {
+		return []*Node{n}
 	}
 	nodes := []*Node{n}
 	for _, c := range n.children {
-		nodes = append(nodes, c.descendents()...)
+		nodes = append(nodes, c.Blossom().descendents()...)
 	}
 	return nodes
 }
