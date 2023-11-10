@@ -1,6 +1,9 @@
 package mwpm
 
-import "math"
+import (
+	"fmt"
+	"math"
+)
 
 type Node struct {
 	label    int
@@ -8,7 +11,8 @@ type Node struct {
 	children []*Node // directs to non-blossom node
 	blossom  *Node   // immediate blossom that contains this node (nil if the node is the outermost blossom)
 	// blossom *Blossom
-	cycle [][3]*Node // cycle of nodes (blossom, start, end)
+	cycle [][2]*Node // cyclic pair of nodes (start, end)
+	chain []*Node    // all nodes in the blossom in the same cyclic order as cycle ()
 	dval  float64
 	temp  int64
 }
@@ -38,15 +42,23 @@ func (n *Node) Root() *Node {
 	return n.parent.Root()
 }
 
-func (n *Node) anscesters() []*Node {
-	if n.parent == nil {
-		return []*Node{n}
+// return chain and pair
+// chain: the list of all outermost blossoms in the tree from n to its root
+// cycle: the list of all pairs of nodes (not blossom) that connects the chain
+// len(chain) = len(cycle) + 1
+func (n *Node) anscestary() (chain []*Node, cycle [][2]*Node) {
+	n = n.Blossom()
+	for n.parent != nil {
+		chain = append(chain, n)
+		cycle = append(cycle, [2]*Node{n.parent, n.parent.children[0]})
+		n = n.parent.Blossom()
 	}
-	return append([]*Node{n}, n.parent.anscesters()...)
+	chain = append(chain, n)
+	return
 }
 
 // return ALL node (not blossom) descendants from the blossom containing n
-func (n *Node) descendants() []*Node {
+func (n *Node) descendents() []*Node {
 	nb := n.Blossom()
 	if len(nb.children) == 0 {
 		if nb == n {
@@ -56,11 +68,12 @@ func (n *Node) descendants() []*Node {
 	}
 	nodes := []*Node{n}
 	for _, c := range n.children {
-		nodes = append(nodes, c.descendants()...)
+		nodes = append(nodes, c.descendents()...)
 	}
 	return nodes
 }
 
+// returns all nodes (not blossom) in the blossom n
 func (n *Node) all() []*Node {
 	if n.blossom == nil {
 		return []*Node{n}
@@ -87,4 +100,31 @@ func (n *Node) RemoveChild(m *Node) {
 			return
 		}
 	}
+}
+
+func (n *Node) BlossomWithin(b *Node) *Node {
+	for n != b {
+		n = n.blossom
+	}
+	return n
+}
+
+func (n *Node) AllBlossoms() []*Node {
+	blossoms := []*Node{n}
+	for n.blossom != nil {
+		blossoms = append(blossoms, n.blossom)
+		n = n.blossom
+	}
+	return blossoms
+}
+
+func (n *Node) RemoveParent() {
+	for n.blossom != nil {
+		n.parent = nil
+		n = n.blossom
+	}
+}
+
+func (n *Node) show() {
+	fmt.Printf("Node id %d label %d\n", n.temp, n.label)
 }

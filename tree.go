@@ -17,7 +17,6 @@ func NewTree(wg graph.Weighted) *Tree {
 		g:     wg,
 		roots: make(map[*Node]struct{}),
 		nodes: make(map[int64]*Node),
-		// edges: make(map[int64]map[int64]float64),
 		tight: make(map[*Node]*Node),
 	}
 	nodes := wg.Nodes()
@@ -25,39 +24,62 @@ func NewTree(wg graph.Weighted) *Tree {
 		nid := nodes.Node().ID()
 		n := NewNode()
 		n.temp = nid
-		t.roots[n] = struct{}{}
 		t.nodes[nid] = n
-		// modes := wg.Nodes()
-		// for modes.Next() {
-		// 	mid := modes.Node().ID()
-		// 	if wg.HasEdgeBetween(nid, mid) {
-		// 		if _, ok := t.edges[nid]; !ok {
-		// 			t.edges[nid] = make(map[int64]float64)
-		// 		}
-		// 		t.edges[nid][mid], _ = wg.Weight(nid, mid)
-		// 	}
-		// }
 	}
 	return t
 }
 
-func (t *Tree) Blossoms() map[*Node]struct{} {
+func (t *Tree) Blossoms() []*Node {
 	var nodes []*Node
-	for n := range t.roots {
-		nodes = append(nodes, n.descendants()...)
-	}
 	unique := make(map[*Node]struct{})
-	for _, n := range nodes {
-		b := n.Blossom()
-		if _, ok := unique[b]; !ok {
-			unique[b] = struct{}{}
+	for n := range t.roots {
+		for _, m := range n.descendents() {
+			b := m.Blossom()
+			if _, ok := unique[b]; !ok {
+				nodes = append(nodes, b)
+				unique[b] = struct{}{}
+			}
 		}
 	}
-	return unique
+	return nodes
 }
 
-// turn the node into a free node.
-func (t *Tree) Free(n *Node) {
-	delete(t.roots, n)
-	n.Blossom().label = 0
+// set the blossom (or nodes) as a free node
+func (t *Tree) SetFree(b *Node) {
+	b.label = 0
+	b.children = []*Node{}
+	b.parent = nil
+	for _, c := range b.cycle {
+		c[0].BlossomWithin(b).label = 0
+	}
+}
+
+// set the node n as tight within the blossom b
+func (t *Tree) MakeTight(n, b *Node) {
+	/* reorder the cycle to start from l */
+	nb := n.BlossomWithin(b)
+	for i, u := range nb.chain {
+		if u == nb {
+			nb.chain = append(nb.chain[i:], nb.chain[:i]...)
+			nb.cycle = append(nb.cycle[i:], nb.cycle[:i]...)
+			break
+		}
+	}
+	for i := 1; i < len(nb.cycle); i += 2 {
+		u, v := nb.cycle[i][0], nb.cycle[i][1]
+		t.tight[u], t.tight[v] = v, u
+		t.MakeTight(u, nb.chain[i])
+		t.MakeTight(v, nb.chain[i+1])
+	}
+}
+
+func (t *Tree) RemoveTight(s [2]*Node) {
+	for _, u := range s {
+		delete(t.tight, u)
+		for u.blossom != nil {
+			for _, c := range u.blossom.cycle {
+				t.RemoveTight(c)
+			}
+		}
+	}
 }
