@@ -12,18 +12,18 @@ type Node struct {
 	blossom  *Node   // immediate blossom that contains this node (nil if the node is the outermost blossom)
 	// blossom *Blossom
 	cycle [][2]*Node // cyclic pair of nodes (start, end)
-	chain []*Node    // all nodes in the blossom in the same cyclic order as cycle ()
-	dval  float64
-	temp  int64
+	// chain []*Node    // all nodes in the blossom in the same cyclic order as cycle ()
+	dval float64
+	temp int64
 }
 
 const Eps = 1e-6
 
 func NewNode() *Node {
 	return &Node{
-		label:   1,
-		parent:  nil,
-		blossom: nil,
+		label:    1,
+		children: []*Node{},
+		cycle:    [][2]*Node{},
 	}
 }
 
@@ -36,20 +36,20 @@ func (n *Node) Blossom() *Node {
 }
 
 func (n *Node) Root() *Node {
-	if n.parent == nil {
-		return n
+	n = n.Blossom()
+	for n.parent != nil {
+		n = n.parent.Blossom()
 	}
-	return n.parent.Root()
+	return n
 }
 
 func (n *Node) anscesters() []*Node {
-	var chain []*Node
 	n = n.Blossom()
+	chain := []*Node{n}
 	for n.parent != nil {
 		chain = append(chain, n.parent.Blossom())
 		n = n.parent.Blossom()
 	}
-	chain = append(chain, n)
 	return chain
 }
 
@@ -96,8 +96,11 @@ func (n *Node) RemoveChild(m *Node) {
 }
 
 func (n *Node) BlossomWithin(b *Node) *Node {
-	for n != b {
+	for n.blossom != b {
 		n = n.blossom
+	}
+	if n.blossom == nil {
+		panic("invalid search for blossom within")
 	}
 	return n
 }

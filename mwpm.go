@@ -1,7 +1,6 @@
 package mwpm
 
 import (
-	"fmt"
 	"math"
 
 	"gonum.org/v1/gonum/graph"
@@ -22,18 +21,19 @@ func Run(g graph.Weighted) (map[int64]int64, bool) {
 		c, s := t.dualUpdate()
 		switch c {
 		case 0:
-			fmt.Printf("GROW: %d %d\n", s[0].temp, s[1].temp)
+			// fmt.Printf("GROW: %d %d\n", s[0].temp, s[1].temp)
 			t.grow(s)
 		case 1:
-			fmt.Printf("AUGMENT: %d %d\n", s[0].temp, s[1].temp)
+			// fmt.Printf("AUGMENT: %d %d\n", s[0].temp, s[1].temp)
 			t.augment(s)
 		case 2:
-			fmt.Printf("SHRINK: %d %d\n", s[0].temp, s[1].temp)
+			// fmt.Printf("SHRINK: %d %d\n", s[0].temp, s[1].temp)
 			t.shrink(s)
 		case 3:
-			fmt.Printf("EXPAND: %d\n", s[0].temp)
+			// fmt.Printf("EXPAND: %d\n", s[0].temp)
 			t.expand(s[0])
 		}
+		// t.show()
 		if len(t.tight) == num {
 			break
 		}
@@ -129,16 +129,16 @@ func (t *Tree) grow(s [2]*Node) {
 		n, m = m, n
 	}
 	l := t.tight[m]
-	n, m, l = n.Blossom(), m.Blossom(), l.Blossom()
+	nb, mb, lb := n.Blossom(), m.Blossom(), l.Blossom()
 	/* set parent-child relationship for n and m */
-	n.children = append(n.children, m)
-	m.parent = n
+	nb.children = append(nb.children, m)
+	mb.parent = n
 	/* set parent-child relationship for m and l */
-	m.children = []*Node{l}
-	l.parent = m
+	mb.children = []*Node{l}
+	lb.parent = m
 	/* re-label */
-	m.label = -1
-	l.label = 1
+	mb.label = -1
+	lb.label = 1
 }
 
 // AUGMENT increases the number of matchings.
@@ -154,6 +154,7 @@ func (t *Tree) augment(s [2]*Node) {
 	/* remove all tight edges from n and m to their roots */
 	/* while doing so, set the tight edges */
 	for _, l := range s {
+		// fmt.Printf("resetting tight edges from %d\n", l.temp)
 		l := l.Blossom()
 		for l.parent != nil {
 			/* u is the child node and v is the parent node */
@@ -164,10 +165,11 @@ func (t *Tree) augment(s [2]*Node) {
 					break
 				}
 			}
+			// fmt.Printf("parent: %d(label %d), child: %d(label %d)\n", v.temp, v.label, u.temp, u.label)
 			if u.Blossom().label > 0 {
 				t.RemoveTight([2]*Node{u, v})
 			} else {
-				t.SetTight([2]*Node{u, v})
+				t.SetTight([2]*Node{u, v}, nil)
 			}
 			l = l.parent.Blossom()
 		}
@@ -176,7 +178,7 @@ func (t *Tree) augment(s [2]*Node) {
 			t.SetFree(u)
 		}
 	}
-	t.SetTight([2]*Node{n, m})
+	t.SetTight([2]*Node{n, m}, nil)
 }
 
 // SHRINK makes a new blossom consists of nodes in a tree,
@@ -197,66 +199,22 @@ func (t *Tree) shrink(s [2]*Node) {
 	n, m := s[0], s[1]
 	/* make a new blossom */
 	b := NewNode()
-	b.label = 1
 	b.cycle = t.makeCycle(n, m) // chain: loop of blossom
-	b.parent = b.cycle[0][0].Blossom().parent
-	for _, s := range b.cycle {
-		sb := s[0].Blossom()
-		t.SetFree(sb)
-		sb.blossom = b
-		b.children = append(b.children, sb.children...)
-	}
+	// fmt.Printf("cycle:")
+	// for _, c := range b.cycle {
+	// 	fmt.Printf("%d->%d ", c[0].temp, c[1].temp)
+	// }
 	for _, c := range b.cycle {
 		t.RemoveTight(c)
 	}
-}
-
-// returns the pair of nodes that connects the cycle.
-// For example, it returns [[2 1] [1 0] [0 4] [4 3] [3 2]] if the tree looks like:
-//		p o  [2]
-//	    /   \
-// [1] o     o [3]
-//     |     |
-// [0] o     o [4]
-//	   n --  m
-
-func (t *Tree) makeCycle(n, m *Node) [][2]*Node {
-	ansn := n.anscesters()
-	ansm := m.anscesters()
-	var i, j int
-	for i = 0; i < len(ansn); i++ {
-		for j = 0; j < len(ansm); j++ {
-			if ansn[i] == ansm[j] {
-				goto FOUND
-			}
-		}
+	b.parent = b.cycle[0][0].Blossom().parent
+	for _, s := range b.cycle {
+		sb := s[0].Blossom()
+		sb.blossom = b
+		t.SetFree(sb)
+		b.children = append(b.children, sb.children...)
 	}
-FOUND:
-	var cycle [][2]*Node
-	for k := i; k > 0; k-- {
-		for l, u := range ansn[k].children {
-			ub := u.Blossom()
-			if ub == ansn[k-1] {
-				ansn[k].children = append(ansn[k].children[:l], ansn[k].children[l+1:]...)
-				ub.parent = nil
-				cycle = append(cycle, [2]*Node{u.parent, u})
-				break
-			}
-		}
-	}
-	cycle = append(cycle, [2]*Node{n, m})
-	for k := 0; k < j; k++ {
-		for l, u := range ansm[k+1].children {
-			ub := u.Blossom()
-			if ub == ansm[k] {
-				ansm[k+1].children = append(ansm[k+1].children[:l], ansm[k+1].children[l+1:]...)
-				ub.parent = nil
-				cycle = append(cycle, [2]*Node{u, ub.parent})
-				break
-			}
-		}
-	}
-	return cycle
+	b.label = 1
 }
 
 // EXPAND removes b and add nodes in b to the tree.
@@ -280,21 +238,21 @@ func (t *Tree) expand(n *Node) {
 	}
 	/* reorder the cycle start from one that is connected to its parent */
 	u := b.parent
-	var i int
-	for i := 0; i < len(b.cycle); i++ {
-		l := b.cycle[i][0].BlossomWithin(b)
-		if l.parent == u {
-			break
+	for i, c := range b.cycle {
+		for _, l := range u.children {
+			if l.Blossom() == c[0].Blossom() {
+				b.cycle = append(b.cycle[i:], b.cycle[:i]...)
+				goto FOUND
+			}
 		}
 	}
-	cycle := append(n.cycle[i:], n.cycle[:i]...)
-	chain := append(n.chain[i:], n.chain[:i]...)
+FOUND:
 	/* find the length of chain in the cycle that goes into the tree */
-	i = 0
+	i := len(b.cycle) - 1
 	if len(b.children) > 0 {
-		for j := 2; j < len(cycle); j += 2 {
-			sb := cycle[j][0].Blossom()
-			if len(sb.children) > 0 {
+		v := b.children[0].Blossom().parent.Blossom()
+		for j, c := range b.cycle {
+			if c[0].Blossom() == v {
 				i = j
 				break
 			}
@@ -302,35 +260,34 @@ func (t *Tree) expand(n *Node) {
 	}
 	/* reverse the order of the cycle if necessary */
 	if i%2 == 1 {
-		rcycle := [][2]*Node{cycle[0]}
-		rchain := []*Node{chain[0]}
-		for j := len(cycle) - 1; j > 0; j-- {
-			rcycle = append(rcycle, cycle[j])
-			rchain = append(rchain, chain[j])
+		rcycle := [][2]*Node{}
+		for j := len(b.cycle) - 1; j > 0; j-- {
+			rcycle = append(rcycle, [2]*Node{rcycle[j][1], rcycle[j][0]})
 		}
-		cycle = rcycle
-		chain = rchain
+		b.cycle = rcycle
+		i = len(b.cycle) - i
 	}
 	/* make the tree */
 	for j := 0; j <= i; j += 2 {
-		sb := cycle[j][0].Blossom()
+		sb := b.cycle[j][0].Blossom()
 		if j == 0 {
 			sb.parent = u
 		} else {
-			sb.parent = cycle[j-1][0]
+			sb.parent = b.cycle[j-1][0]
 		}
 		if j == i {
 			sb.children = b.children
 		} else {
-			sb.children = []*Node{cycle[j][1]}
+			sb.children = []*Node{b.cycle[j][1]}
+		}
+		if j%2 == 0 {
+			sb.label = -1
+		} else {
+			sb.label = 1
 		}
 	}
 	/* make the tight edges */
-	for i := 0; i < len(cycle); i += 2 {
-		c := cycle[i]
-		u, v := chain[i], chain[i+1]
-		t.tight[c[0]], t.tight[c[1]] = c[1], c[0]
-		t.MakeTight(c[0], u)
-		t.MakeTight(c[1], v)
+	for i := 0; i < len(b.cycle); i += 2 {
+		t.SetTight(b.cycle[i], nil)
 	}
 }
