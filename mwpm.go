@@ -198,12 +198,13 @@ func (t *Tree) shrink(s [2]*Node) {
 	/* make a new blossom */
 	b := NewNode()
 	b.label = 1
-	b.chain, b.cycle = t.makeCycle(n, m) // chain: loop of blossom
+	b.cycle = t.makeCycle(n, m) // chain: loop of blossom
 	b.parent = b.cycle[0][0].Blossom().parent
-	for _, l := range b.chain {
-		t.SetFree(l)
-		l.blossom = b
-		b.children = append(b.children, l.children...)
+	for _, s := range b.cycle {
+		sb := s[0].Blossom()
+		t.SetFree(sb)
+		sb.blossom = b
+		b.children = append(b.children, sb.children...)
 	}
 	for _, c := range b.cycle {
 		t.RemoveTight(c)
@@ -219,37 +220,43 @@ func (t *Tree) shrink(s [2]*Node) {
 // [0] o     o [4]
 //	   n --  m
 
-func (t *Tree) makeCycle(n, m *Node) ([]*Node, [][2]*Node) {
-	cn, pn := n.anscestary()
-	cm, pm := m.anscestary()
+func (t *Tree) makeCycle(n, m *Node) [][2]*Node {
+	ansn := n.anscesters()
+	ansm := m.anscesters()
 	var i, j int
-	for i = 0; i < len(cn); i++ {
-		for j = 0; j < len(cm); j++ {
-			if cn[i] == cm[j] {
+	for i = 0; i < len(ansn); i++ {
+		for j = 0; j < len(ansm); j++ {
+			if ansn[i] == ansm[j] {
 				goto FOUND
 			}
 		}
 	}
 FOUND:
-	/* define chain of blossoms and chain of pairs connecting the cycle */
-	/* while doing so, reset the parent and children of nodes in the cycle */
 	var cycle [][2]*Node
-	var chain []*Node = []*Node{}
 	for k := i; k > 0; k-- {
-		chain = append(chain, cn[k])
-		cycle = append(cycle, [2]*Node{pn[k-1][1], pn[k-1][0]})
-		pn[k-1][1].RemoveChild(pn[k-1][0])
-		pn[k-1][0].RemoveParent()
+		for l, u := range ansn[k].children {
+			ub := u.Blossom()
+			if ub == ansn[k-1] {
+				ansn[k].children = append(ansn[k].children[:l], ansn[k].children[l+1:]...)
+				ub.parent = nil
+				cycle = append(cycle, [2]*Node{u.parent, u})
+				break
+			}
+		}
 	}
-	chain = append(chain, cn[0])
 	cycle = append(cycle, [2]*Node{n, m})
 	for k := 0; k < j; k++ {
-		cycle = append(cycle, pm[k])
-		pm[k][1].RemoveChild(pm[k][0])
-		pm[k][0].RemoveParent()
+		for l, u := range ansm[k+1].children {
+			ub := u.Blossom()
+			if ub == ansm[k] {
+				ansm[k+1].children = append(ansm[k+1].children[:l], ansm[k+1].children[l+1:]...)
+				ub.parent = nil
+				cycle = append(cycle, [2]*Node{u, ub.parent})
+				break
+			}
+		}
 	}
-	chain = append(chain, cm[:j]...)
-	return chain, cycle
+	return cycle
 }
 
 // EXPAND removes b and add nodes in b to the tree.

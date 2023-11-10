@@ -42,19 +42,15 @@ func (n *Node) Root() *Node {
 	return n.parent.Root()
 }
 
-// return chain and pair
-// chain: the list of all outermost blossoms in the tree from n to its root
-// cycle: the list of all pairs of nodes (not blossom) that connects the chain
-// len(chain) = len(cycle) + 1
-func (n *Node) anscestary() (chain []*Node, cycle [][2]*Node) {
+func (n *Node) anscesters() []*Node {
+	var chain []*Node
 	n = n.Blossom()
 	for n.parent != nil {
-		chain = append(chain, n)
-		cycle = append(cycle, [2]*Node{n.parent, n.parent.children[0]})
+		chain = append(chain, n.parent.Blossom())
 		n = n.parent.Blossom()
 	}
 	chain = append(chain, n)
-	return
+	return chain
 }
 
 // return ALL child blossom nodes from n
