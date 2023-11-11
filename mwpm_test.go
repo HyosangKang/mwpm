@@ -27,6 +27,10 @@ func TestMain(m *testing.M) {
 			}
 		}
 	}
-	pair, _ := Run(wg)
-	fmt.Println(pair)
+	for i := 0; i < 10000; i++ {
+		fmt.Println()
+		fmt.Println("----------------NEW----------------")
+		pair, _ := Run(wg)
+		fmt.Println(pair)
+	}
 }
