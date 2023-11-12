@@ -12,7 +12,6 @@ import (
 // and returns a set of perfect matchings that minimizes the sum of weights.
 // It is based on Komologov's Blossom V algorithm.
 // (We used "multiple trees, constant delta" approach.)
-// Technically, a blossom is a set of nodes with cycle, but we call it as a node.
 func Run(g graph.Weighted) ([][2]int64, bool) {
 	num := g.Nodes().Len()
 	if num%2 == 1 {
