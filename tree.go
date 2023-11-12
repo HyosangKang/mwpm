@@ -8,18 +8,18 @@ import (
 
 type Tree struct {
 	g     graph.Weighted
-	roots map[*Blossom]struct{}
-	nodes map[int64]*Blossom
-	temp  map[*Blossom]int64
-	tight map[*Blossom]*Blossom // blossom -> node
+	roots map[*Node]struct{}
+	nodes map[int64]*Node
+	temp  map[*Node]int64
+	tight map[*Node]*Node // blossom -> node
 }
 
 func NewTree(wg graph.Weighted) *Tree {
 	t := &Tree{
 		g:     wg,
-		roots: make(map[*Blossom]struct{}),
-		nodes: make(map[int64]*Blossom),
-		tight: make(map[*Blossom]*Blossom),
+		roots: make(map[*Node]struct{}),
+		nodes: make(map[int64]*Node),
+		tight: make(map[*Node]*Node),
 	}
 	nodes := wg.Nodes()
 	for nodes.Next() {
@@ -31,9 +31,9 @@ func NewTree(wg graph.Weighted) *Tree {
 	return t
 }
 
-func (t *Tree) Blossoms() []*Blossom {
-	var nodes []*Blossom
-	unique := make(map[*Blossom]struct{})
+func (t *Tree) Blossoms() []*Node {
+	var nodes []*Node
+	unique := make(map[*Node]struct{})
 	for n := range t.roots {
 		for _, m := range n.descendents() {
 			b := m.Blossom()
@@ -46,19 +46,8 @@ func (t *Tree) Blossoms() []*Blossom {
 	return nodes
 }
 
-// set the blossom (or nodes) as a free node
-func (t *Tree) SetFree(b *Blossom) {
-	// fmt.Printf("set free %d (%v)\n", b.temp, b)
-	b.label = 0
-	b.children = []*Blossom{}
-	b.parent = nil
-	for _, c := range b.cycle {
-		t.SetFree(c[0].BlossomWithin(b))
-	}
-}
-
 // set the node n as tight within the blossom b
-func (t *Tree) SetTight(s [2]*Blossom, b *Blossom) {
+func (t *Tree) SetTight(s [2]*Node, b *Node) {
 	// fmt.Printf("setting tight edge %d:%d\n", s[0].temp, s[1].temp)
 	t.tight[s[0]], t.tight[s[1]] = s[1], s[0]
 	for _, l := range s {
@@ -79,18 +68,11 @@ func (t *Tree) SetTight(s [2]*Blossom, b *Blossom) {
 }
 
 // remove the tight edge within the blossom b
-func (t *Tree) RemoveTight(s [2]*Blossom, b *Blossom) {
-	fmt.Printf("removing tight edge %d:%d\n", s[0].temp, s[1].temp)
+func (t *Tree) RemoveTight(s [2]*Node) {
 	for _, u := range s {
-		delete(t.tight, u)
-		for u.blossom != b {
-			if u.blossom == nil {
-				panic("invalid search for blossom within")
-			}
-			for _, c := range u.blossom.cycle {
-				t.RemoveTight(c, u.blossom)
-			}
-			u = u.blossom
+		if _, ok := t.tight[u]; ok {
+			delete(t.tight, u)
+			t.RemoveTightWithin(u.Blossom())
 		}
 	}
 }
@@ -104,7 +86,7 @@ func (t *Tree) RemoveTight(s [2]*Blossom, b *Blossom) {
 // [0] o     o [4]
 //	   n --  m
 
-func (t *Tree) makeCycle(n, m *Blossom) [][2]*Blossom {
+func (t *Tree) makeCycle(n, m *Node) [][2]*Node {
 	fmt.Printf("making cycle...\n")
 	fmt.Printf("anscestary of %d: ", n.temp)
 	ansn := n.anscesters()
@@ -128,11 +110,11 @@ func (t *Tree) makeCycle(n, m *Blossom) [][2]*Blossom {
 	}
 FOUND:
 	fmt.Printf("common parent: %d (i:%d j:%d)\n", ansn[i].temp, i, j)
-	var cycle [][2]*Blossom
+	var cycle [][2]*Node
 	for k := i; k > 0; k-- {
 		u := ansn[k].popChild(ansn[k-1])
 		ub := u.Blossom()
-		cycle = append(cycle, [2]*Blossom{ub.parent, u})
+		cycle = append(cycle, [2]*Node{ub.parent, u})
 		ub.parent = nil
 	}
 	fmt.Printf("cycle from parent to n: ")
@@ -140,12 +122,12 @@ FOUND:
 		fmt.Printf("%d->%d ", c[0].temp, c[1].temp)
 	}
 	fmt.Println()
-	cycle = append(cycle, [2]*Blossom{n, m})
+	cycle = append(cycle, [2]*Node{n, m})
 	fmt.Printf("append cycle n to m %d->%d\n", n.temp, m.temp)
 	for k := 0; k < j; k++ {
 		u := ansm[k+1].popChild(ansm[k])
 		ub := u.Blossom()
-		cycle = append(cycle, [2]*Blossom{u, ub.parent})
+		cycle = append(cycle, [2]*Node{u, ub.parent})
 		ub.parent = nil
 	}
 	fmt.Printf("total cycle: ")
@@ -168,9 +150,10 @@ func (t *Tree) show() {
 	fmt.Println()
 }
 
-func (t *Tree) TightWith(n *Blossom) *Blossom {
-	n = n.Blossom()
+func (t *Tree) TightFrom(n *Node) *Node {
+	fmt.Println(n)
 	for _, u := range n.all() {
+		fmt.Println(t.tight[u])
 		if v, ok := t.tight[u]; ok {
 			if v.Blossom() != n {
 				return v
@@ -179,4 +162,15 @@ func (t *Tree) TightWith(n *Blossom) *Blossom {
 	}
 	panic("No tight match found")
 	return nil
+}
+
+func (t *Tree) RemoveTightWithin(b *Node) {
+	for _, c := range b.cycle {
+		for _, u := range c {
+			if u.BlossomWithin(b).blossom == b {
+				delete(t.tight, u)
+			}
+		}
+		t.RemoveTightWithin(c[0].BlossomWithin(b))
+	}
 }
