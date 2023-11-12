@@ -1,10 +1,5 @@
 package mwpm
 
-import (
-	"fmt"
-	"math"
-)
-
 type Node struct {
 	label    int
 	parent   *Node      // directs to non-blossom node
@@ -13,16 +8,6 @@ type Node struct {
 	cycle    [][2]*Node // cyclic pair of nodes (start, end)
 	dval     float64
 	temp     int64
-}
-
-const Eps = 1e-6
-
-func NewNode() *Node {
-	return &Node{
-		label:    1,
-		children: []*Node{},
-		cycle:    [][2]*Node{},
-	}
 }
 
 // returns the outermost blossom
@@ -41,7 +26,7 @@ func (n *Node) Root() *Node {
 	return n
 }
 
-func (n *Node) anscesters() []*Node {
+func (n *Node) Anscesters() []*Node {
 	n = n.Blossom()
 	chain := []*Node{n}
 	for n.parent != nil {
@@ -51,7 +36,7 @@ func (n *Node) anscesters() []*Node {
 	return chain
 }
 
-func (n *Node) anscestary() [][2]*Node {
+func (n *Node) Anscestary() [][2]*Node {
 	n = n.Blossom()
 	cycle := [][2]*Node{}
 	for n.parent != nil {
@@ -67,45 +52,28 @@ func (n *Node) anscestary() [][2]*Node {
 }
 
 // return ALL child blossom nodes from n
-func (n *Node) descendents() []*Node {
+func (n *Node) Descendents() []*Node {
 	n = n.Blossom()
 	if len(n.children) == 0 {
 		return []*Node{n}
 	}
 	nodes := []*Node{n}
 	for _, c := range n.children {
-		nodes = append(nodes, c.Blossom().descendents()...)
+		nodes = append(nodes, c.Blossom().Descendents()...)
 	}
 	return nodes
 }
 
-// returns all nodes (not blossom) in the blossom n
-func (n *Node) all() []*Node {
+// returns All nodes (not blossom) in the blossom n
+func (n *Node) All() []*Node {
 	if len(n.cycle) == 0 {
 		return []*Node{n}
 	}
 	nodes := []*Node{}
 	for _, c := range n.cycle {
-		nodes = append(nodes, c[0].BlossomWithin(n).all()...)
+		nodes = append(nodes, c[0].BlossomWithin(n).All()...)
 	}
 	return nodes
-}
-
-func (n *Node) IsDvalZero() bool {
-	return math.Abs(n.dval) < Eps
-}
-
-func (n *Node) IsBlossom() bool {
-	return len(n.cycle) > 1
-}
-
-func (n *Node) RemoveChild(m *Node) {
-	for i, c := range n.children {
-		if c == m {
-			n.children = append(n.children[:i], n.children[i+1:]...)
-			return
-		}
-	}
 }
 
 func (n *Node) BlossomWithin(b *Node) *Node {
@@ -118,15 +86,6 @@ func (n *Node) BlossomWithin(b *Node) *Node {
 	return n
 }
 
-func (n *Node) AllBlossoms() []*Node {
-	blossoms := []*Node{n}
-	for n.blossom != nil {
-		blossoms = append(blossoms, n.blossom)
-		n = n.blossom
-	}
-	return blossoms
-}
-
 func (n *Node) RemoveParent() {
 	for n.blossom != nil {
 		n.parent = nil
@@ -134,11 +93,7 @@ func (n *Node) RemoveParent() {
 	}
 }
 
-func (n *Node) show() {
-	fmt.Printf("Node id %d label %d\n", n.temp, n.label)
-}
-
-func (n *Node) popChild(m *Node) *Node {
+func (n *Node) PopChild(m *Node) *Node {
 	for l, u := range n.children {
 		ub := u.Blossom()
 		if ub == m {
@@ -164,16 +119,10 @@ func (b *Node) SetFree() {
 	}
 }
 
-func (n *Node) update(delta float64) {
+func (n *Node) Update(delta float64) {
 	n.dval += float64(n.label) * delta
 	for _, c := range n.cycle {
 		cb := c[0].BlossomWithin(n)
-		cb.update(delta)
-	}
-}
-
-func (n *Node) RemoveTight() {
-	for _, c := range n.cycle {
-		c[0].BlossomWithin(n).RemoveTight()
+		cb.Update(delta)
 	}
 }

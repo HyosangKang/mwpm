@@ -1,8 +1,6 @@
 package mwpm
 
 import (
-	"fmt"
-
 	"gonum.org/v1/gonum/graph"
 )
 
@@ -10,8 +8,7 @@ type Tree struct {
 	g     graph.Weighted
 	roots map[*Node]struct{}
 	nodes map[int64]*Node
-	temp  map[*Node]int64
-	tight map[*Node]*Node // blossom -> node
+	tight map[*Node]*Node
 }
 
 func NewTree(wg graph.Weighted) *Tree {
@@ -24,7 +21,7 @@ func NewTree(wg graph.Weighted) *Tree {
 	nodes := wg.Nodes()
 	for nodes.Next() {
 		nid := nodes.Node().ID()
-		n := NewNode()
+		n := &Node{label: 1}
 		n.temp = nid
 		t.nodes[nid] = n
 	}
@@ -35,7 +32,7 @@ func (t *Tree) Blossoms() []*Node {
 	var nodes []*Node
 	unique := make(map[*Node]struct{})
 	for n := range t.roots {
-		for _, m := range n.descendents() {
+		for _, m := range n.Descendents() {
 			b := m.Blossom()
 			if _, ok := unique[b]; !ok {
 				nodes = append(nodes, b)
@@ -44,6 +41,44 @@ func (t *Tree) Blossoms() []*Node {
 		}
 	}
 	return nodes
+}
+
+// returns the pair of nodes that connects the cycle.
+// For example, it returns [[2 1] [1 0] [0 4] [4 3] [3 2]] if the tree looks like:
+//		p o  [2]
+//	    /   \
+// [1] o     o [3]
+//     |     |
+// [0] o     o [4]
+//	   n --  m
+
+func (t *Tree) MakeCycle(n, m *Node) [][2]*Node {
+	ansn := n.Anscesters()
+	ansm := m.Anscesters()
+	var i, j int
+	for i = 0; i < len(ansn); i++ {
+		for j = 0; j < len(ansm); j++ {
+			if ansn[i] == ansm[j] {
+				goto FOUND
+			}
+		}
+	}
+FOUND:
+	var cycle [][2]*Node
+	for k := i; k > 0; k-- {
+		u := ansn[k].PopChild(ansn[k-1])
+		ub := u.Blossom()
+		cycle = append(cycle, [2]*Node{ub.parent, u})
+		ub.parent = nil
+	}
+	cycle = append(cycle, [2]*Node{n, m})
+	for k := 0; k < j; k++ {
+		u := ansm[k+1].PopChild(ansm[k])
+		ub := u.Blossom()
+		cycle = append(cycle, [2]*Node{u, ub.parent})
+		ub.parent = nil
+	}
+	return cycle
 }
 
 // set the node n as tight within the blossom b
@@ -67,93 +102,8 @@ func (t *Tree) SetTight(s [2]*Node, b *Node) {
 	}
 }
 
-// remove the tight edge within the blossom b
-func (t *Tree) RemoveTight(s [2]*Node) {
-	for _, u := range s {
-		if _, ok := t.tight[u]; ok {
-			delete(t.tight, u)
-			t.RemoveTightWithin(u.Blossom())
-		}
-	}
-}
-
-// returns the pair of nodes that connects the cycle.
-// For example, it returns [[2 1] [1 0] [0 4] [4 3] [3 2]] if the tree looks like:
-//		p o  [2]
-//	    /   \
-// [1] o     o [3]
-//     |     |
-// [0] o     o [4]
-//	   n --  m
-
-func (t *Tree) makeCycle(n, m *Node) [][2]*Node {
-	fmt.Printf("making cycle...\n")
-	fmt.Printf("anscestary of %d: ", n.temp)
-	ansn := n.anscesters()
-	for _, a := range ansn {
-		fmt.Printf("%d ", a.temp)
-	}
-	fmt.Println()
-	fmt.Printf("anscestary of %d: ", m.temp)
-	ansm := m.anscesters()
-	for _, a := range ansm {
-		fmt.Printf("%d ", a.temp)
-	}
-	fmt.Println()
-	var i, j int
-	for i = 0; i < len(ansn); i++ {
-		for j = 0; j < len(ansm); j++ {
-			if ansn[i] == ansm[j] {
-				goto FOUND
-			}
-		}
-	}
-FOUND:
-	fmt.Printf("common parent: %d (i:%d j:%d)\n", ansn[i].temp, i, j)
-	var cycle [][2]*Node
-	for k := i; k > 0; k-- {
-		u := ansn[k].popChild(ansn[k-1])
-		ub := u.Blossom()
-		cycle = append(cycle, [2]*Node{ub.parent, u})
-		ub.parent = nil
-	}
-	fmt.Printf("cycle from parent to n: ")
-	for _, c := range cycle {
-		fmt.Printf("%d->%d ", c[0].temp, c[1].temp)
-	}
-	fmt.Println()
-	cycle = append(cycle, [2]*Node{n, m})
-	fmt.Printf("append cycle n to m %d->%d\n", n.temp, m.temp)
-	for k := 0; k < j; k++ {
-		u := ansm[k+1].popChild(ansm[k])
-		ub := u.Blossom()
-		cycle = append(cycle, [2]*Node{u, ub.parent})
-		ub.parent = nil
-	}
-	fmt.Printf("total cycle: ")
-	for _, c := range cycle {
-		fmt.Printf("%d->%d ", c[0].temp, c[1].temp)
-	}
-	fmt.Println()
-	return cycle
-}
-
-func (t *Tree) show() {
-	fmt.Printf("tight edges:")
-	for u, v := range t.tight {
-		fmt.Printf("%d:%d ", u.temp, v.temp)
-	}
-	fmt.Printf("labels:")
-	for _, n := range t.nodes {
-		fmt.Printf("%d:%d ", n.temp, n.label)
-	}
-	fmt.Println()
-}
-
 func (t *Tree) TightFrom(n *Node) *Node {
-	fmt.Println(n)
-	for _, u := range n.all() {
-		fmt.Println(t.tight[u])
+	for _, u := range n.All() {
 		if v, ok := t.tight[u]; ok {
 			if v.Blossom() != n {
 				return v
@@ -162,6 +112,16 @@ func (t *Tree) TightFrom(n *Node) *Node {
 	}
 	panic("No tight match found")
 	return nil
+}
+
+// remove the tight edge within the blossom b
+func (t *Tree) RemoveTight(s [2]*Node) {
+	for _, u := range s {
+		if _, ok := t.tight[u]; ok {
+			delete(t.tight, u)
+			t.RemoveTightWithin(u.Blossom())
+		}
+	}
 }
 
 func (t *Tree) RemoveTightWithin(b *Node) {

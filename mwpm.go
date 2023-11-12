@@ -1,7 +1,6 @@
 package mwpm
 
 import (
-	"fmt"
 	"math"
 	"math/rand"
 	"sort"
@@ -24,26 +23,16 @@ func Run(g graph.Weighted) ([][2]int64, bool) {
 		if len(t.tight) == num {
 			break
 		}
-		c, s := t.dual()
+		c, s := t.Dual()
 		switch c {
 		case 0:
-			fmt.Printf("GROW: %d %d\n", s[0].temp, s[1].temp)
-			t.grow(s)
+			t.Grow(s)
 		case 1:
-			fmt.Printf("AUGMENT: %d %d\n", s[0].temp, s[1].temp)
-			t.augment(s)
+			t.Augment(s)
 		case 2:
-			fmt.Printf("SHRINK: %d %d\n", s[0].temp, s[1].temp)
-			t.shrink(s)
+			t.Shrink(s)
 		case 3:
-			fmt.Println("EXPAND")
-			fmt.Printf("EXPAND: %d\n", s[0].temp)
-			t.expand(s[0])
-		}
-	}
-	for _, m := range t.tight {
-		if _, ok := t.tight[m]; !ok {
-			panic("NO TIGHT PAIR")
+			t.Expand(s[0])
 		}
 	}
 	inv := make(map[*Node]int64)
@@ -63,9 +52,9 @@ func Run(g graph.Weighted) ([][2]int64, bool) {
 	return match, true
 }
 
-// dual updates the dual values of all blossoms according to their label.
+// Dual updates the Dual values of all blossoms according to their label.
 // It adds d if the label is +1, substract d if the label is -1.
-func (t *Tree) dual() (int, [2]*Node) {
+func (t *Tree) Dual() (int, [2]*Node) {
 	var delta, dval float64 = math.MaxFloat64, math.MaxFloat64
 	var c int = -1
 	var s, y [2]*Node
@@ -76,7 +65,7 @@ func (t *Tree) dual() (int, [2]*Node) {
 			if i >= j || !t.g.HasEdgeBetween(i, j) || nb == mb {
 				continue
 			}
-			slack := t.slack([2]int64{i, j})
+			slack := t.Slack([2]int64{i, j})
 			if (nb.label == 0 && mb.label > 0) && delta > slack {
 				delta = slack
 				c = 0
@@ -108,19 +97,18 @@ func (t *Tree) dual() (int, [2]*Node) {
 		s = y
 		c = 3
 	}
-	fmt.Printf("delta: %f\n", delta)
 	/* update dval */
 	if delta != 0 {
 		for _, n := range t.Blossoms() {
-			n.update(delta)
+			n.Update(delta)
 		}
 	}
 	return c, s
 }
 
-// returns the slack of an edge e = (u, v) (u, v are not blossoms)
-// slack(e) = weight(e) - sum of all dual values of blossoms (including u, v) that containig u and v
-func (t *Tree) slack(ids [2]int64) float64 {
+// returns the Slack of an edge e = (u, v) (u, v are not blossoms)
+// Slack(e) = weight(e) - sum of all dual values of blossoms (including u, v) that containig u and v
+func (t *Tree) Slack(ids [2]int64) float64 {
 	s, _ := t.g.Weight(ids[0], ids[1])
 	for _, id := range ids {
 		n := t.nodes[id]
@@ -139,7 +127,7 @@ func (t *Tree) slack(ids [2]int64) float64 {
 //	   u     v
 // tight pair: (u, v), u is in the blossom of m
 
-func (t *Tree) grow(s [2]*Node) {
+func (t *Tree) Grow(s [2]*Node) {
 	n, m := s[0], s[1]
 	nb, mb := n.Blossom(), m.Blossom()
 	v := t.TightFrom(mb)
@@ -148,13 +136,10 @@ func (t *Tree) grow(s [2]*Node) {
 	if m.Blossom() != u.Blossom() {
 		panic("Error in GROW: m.blossom != u.blossom")
 	}
-	/* set parent-child relationship for n and m */
 	nb.children = append(nb.children, m)
 	mb.parent = n
-	/* set parent-child relationship for m and l */
 	mb.children = []*Node{v}
-	vb.parent = u //
-	/* re-label */
+	vb.parent = u
 	mb.label = -1
 	vb.label = 1
 }
@@ -167,19 +152,16 @@ func (t *Tree) grow(s [2]*Node) {
 //   (+) o - o (+) o (+)             o +-+ o   o
 //       n   m
 
-func (t *Tree) augment(s [2]*Node) {
-	/* remove all tight edges from n and m to their roots */
-	/* while doing so, set the tight edges */
+func (t *Tree) Augment(s [2]*Node) {
 	for _, l := range s {
-		pairs := l.anscestary()
+		pairs := l.Anscestary()
 		for i := 0; i < len(pairs); i += 2 {
-			// fmt.Printf("Calling RemoveTight from AUGMENT %d, %d\n", p[0].temp, p[1].temp)
 			t.RemoveTight(pairs[i])
 		}
 		for i := 1; i < len(pairs); i += 2 {
 			t.SetTight(pairs[i], nil)
 		}
-		for _, u := range l.Root().descendents() {
+		for _, u := range l.Root().Descendents() {
 			u.SetFree()
 		}
 	}
@@ -197,13 +179,13 @@ func (t *Tree) augment(s [2]*Node) {
 // (-) - (+) - (+) - (-)                         n     m
 //        n     m
 
-func (t *Tree) shrink(s [2]*Node) {
+func (t *Tree) Shrink(s [2]*Node) {
 	n, m := s[0], s[1]
 	/* make a new blossom */
 	b := &Node{
 		temp:  rand.Int63(),
 		label: 1,
-		cycle: t.makeCycle(n, m), // chain: loop of blossom
+		cycle: t.MakeCycle(n, m), // chain: loop of blossom
 	}
 	b.parent = b.cycle[0][0].Blossom().parent
 	for _, c := range b.cycle {
@@ -226,7 +208,7 @@ func (t *Tree) shrink(s [2]*Node) {
 //                                              [0] (+)
 // Nodes that are not added to the tree is matched pairwise.
 
-func (t *Tree) expand(n *Node) {
+func (t *Tree) Expand(n *Node) {
 	/* remove the blossom */
 	b := n.Blossom()
 	for _, c := range b.cycle {
