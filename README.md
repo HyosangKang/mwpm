@@ -41,7 +41,11 @@ func main() {
 	for i := 0; i < len(adj); i++ {
 		for j := 0; j < len(adj[i]); j++ {
 			if adj[i][j] != 0 {
-				wg.SetWeightedEdge(wg.NewWeightedEdge(wg.Node(int64(i)), wg.Node(int64(j)), float64(adj[i][j])))
+				wg.SetWeightedEdge(
+                    wg.NewWeightedEdge(
+                        wg.Node(int64(i)), 
+                        wg.Node(int64(j)), 
+                        float64(adj[i][j])))
 			}
 		}
 	}
