@@ -1,11 +1,21 @@
 # mwpm
 GO implementation of minimum weight perfect matching algorithm
 
-# Reference
+## Reference
 Kolmogorov, V. Blossom V: a new implementation of a minimum cost perfect matching algorithm. <em>Math. Prog. Comp.</em> 1, 43–67 (2009). https://doi.org/10.1007/s12532-009-0002-8
  
-# Usage
-The function `Run` is the main function that finds the perfect matching. It takes a graph that implements the interface `WeightedUndirectedGraph` and returns a list of pairs of IDs of nodes that are matched. (Each pair of IDs is sorted in ascending order.) The second output argument is the boolean value that indicates whether the matching is successful or not. Currently, it is `false` only when there are odd number of nodes in the graph.
+## Usage
+The function `Run` is the main function that finds the perfect matching. It takes a graph that implements the [`Weighted`](https://pkg.go.dev/gonum.org/v1/gonum/graph#Weighted) interface in [`gonum.org/v1/gonum/graph`](https://pkg.go.dev/gonum.org/v1/gonum/graph).
+
+```
+func Run(graph.Weighted) ([][2]int64, bool)
+```
+
+The `Run` returns two values:
+* the slice of pairs (`[2]int64`) of IDs of nodes that are matched. (Each pair of IDs is sorted in ascending order.) 
+* the boolean value that indicates whether the matching is successful or not. It is `false` when there are odd number of nodes in the graph, or a perfect matching is not possible.
+
+## Example
 
 ```go
 package main

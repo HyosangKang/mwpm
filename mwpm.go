@@ -24,6 +24,8 @@ func Run(g graph.Weighted) ([][2]int64, bool) {
 		}
 		c, s := t.Dual()
 		switch c {
+		case -1:
+			return nil, false
 		case 0:
 			t.Grow(s)
 		case 1:
@@ -54,7 +56,7 @@ func Run(g graph.Weighted) ([][2]int64, bool) {
 // Dual updates the Dual values of all blossoms according to their label.
 // It adds d if the label is +1, substract d if the label is -1.
 func (t *Tree) Dual() (int, [2]*Node) {
-	var delta, dval float64 = math.MaxFloat64, math.MaxFloat64
+	var delta, dval float64 = math.Inf(1), math.Inf(1)
 	var c int = -1
 	var s, y [2]*Node
 	for i, n := range t.nodes {
@@ -91,16 +93,17 @@ func (t *Tree) Dual() (int, [2]*Node) {
 			y = [2]*Node{n, nil}
 		}
 	}
-	if c == -1 { // EXPAND
-		delta = dval
-		s = y
-		c = 3
-	}
-	/* update dval */
-	if delta != 0 {
-		for _, n := range t.Blossoms() {
-			n.Update(delta)
+	if c == -1 {
+		if math.IsInf(delta, 1) {
+			return -1, [2]*Node{}
+		} else {
+			delta = dval
+			s = y
+			c = 3
 		}
+	}
+	for _, n := range t.Blossoms() {
+		n.Update(delta)
 	}
 	return c, s
 }
